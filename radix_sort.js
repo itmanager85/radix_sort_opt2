@@ -576,4 +576,6 @@
                     console.log(`count_unmatch: ${count_unmatch}`);
                 });
             }
+
+            return endTime - startTime;
         }
