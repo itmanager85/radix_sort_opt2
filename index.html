@@ -44,21 +44,8 @@
         }
 
         initFunction().then(() => {
-
           // TEST HERE !!!
-          //first execution more slower
           test(engine); 
-                    
-          const NUM_TEST_COUNT = 30; //1; //10;
-          let avg_time = 0; 
-
-          for (let i=0; i<NUM_TEST_COUNT; i++) {
-            // 1.7 ms on average
-            avg_time += test(engine); 
-          }
-
-          console.log(`Call to radix_sort took ${avg_time/NUM_TEST_COUNT} milliseconds (on average of ${NUM_TEST_COUNT} PASSES)`);
-          
         });
 
       </script>

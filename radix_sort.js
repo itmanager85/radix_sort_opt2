@@ -476,18 +476,8 @@
             let max_value = 1073741824-1; // 10000;
 
             let hInput = new Int32Array(count);
-            for (let i=0; i<count; i++)
-            {
-                hInput[i] = getRandomInt(max_value);
-            }
-
             let hReference = new Int32Array(count);
-            hReference.set(hInput);
-            hReference.sort();
-
-            let buf_data = createBuffer0(count * 4);
-
-            buf_data.update(hInput, hInput.byteOffset, hInput.byteLength);
+            //let buf_data = createBuffer0(count * 4);
 
             let buf_tmp = new Array(2);
             buf_tmp[0] = createBuffer0(count * 4);
@@ -515,67 +505,87 @@
             let pipeline_radix_scan3_buf = GetPipelineRadixScan3_buf(buffers_scan1, buffers_scan2);
             let pipeline_radix_scatter_buf = GetPipelineRadixScatter_buf(count, buf_tmp, buffers_scan1[0],  buffers_scan2[0])
 
-            buf_tmp[0].update(hInput, hInput.byteOffset, hInput.byteLength);
+            const NUM_PASSES = 30;
+            let avgTime = 0;
+            for (let p=0; p<NUM_PASSES + 1; p++) {    
 
-            const startTime = performance.now();
-
-            for (let i=0; i<bits; i++)
-            {
-                let j = i % 2;
-                {
-                    {
-                        let num_groups = Math.floor((count + WORKGROUP_SIZE_2x - 1)/WORKGROUP_SIZE_2x); 
-                        Update_PipelineRadixScan1_buf(j, i);
-                        pipeline_radix_scan1_buf[j].dispatch(num_groups, 1, 1);
-                    }
-
-                    
-                    for (let k = 1; k<buffers_scan1.length; k++)
-                    {
-                        let num_groups = Math.floor((buf_sizes[k] + WORKGROUP_SIZE_2x - 1)/WORKGROUP_SIZE_2x); 
-                        pipeline_radix_scan2_buf[k-1].dispatch(num_groups, 1,1); 
-                    }
-
-                    for (let k = (buffers_scan1.length - 1) - 1; k>=0; k--)
-                    {
-                        let num_groups = Math.floor((buf_sizes[k] + WORKGROUP_SIZE - 1)/WORKGROUP_SIZE) - 2; 
-                        pipeline_radix_scan3_buf[k].dispatch(num_groups, 1,1);
-                    }
+                for (let i=0; i<count; i++) {
+                    hInput[i] = getRandomInt(max_value);
                 }
 
+                hReference.set(hInput);
+                hReference.sort();
+
+                //buf_data.update(hInput, hInput.byteOffset, hInput.byteLength);
+                buf_tmp[0].update(hInput, hInput.byteOffset, hInput.byteLength);
+
+                const startTime = performance.now();
+
+                for (let i=0; i<bits; i++)
                 {
-                    let num_groups = Math.floor((count + WORKGROUP_SIZE -1)/WORKGROUP_SIZE);
-                    pipeline_radix_scatter_buf[j].dispatch(num_groups, 1,1); 
-                }
-            }
-
-            const endTime = performance.now();
-            console.log(`Call to radix_sort took ${endTime - startTime} milliseconds`);    
-
-            let buf_result;
-
-            {
-                let j = bits % 2;
-                buf_result = buf_tmp[j];
-            }
-
-            let hOutput = new Int32Array(count); 
-            {
-                buf_result.read(0, count * 4, hOutput).then((arrayBufferView) => {
-
-                    hOutput = arrayBufferView;
-                    let count_unmatch = 0;
-                    for (let i=0; i<count; i++)
+                    let j = i % 2;
                     {
-                        if (hOutput[i] != hReference[i])
                         {
-                            count_unmatch++;
+                            let num_groups = Math.floor((count + WORKGROUP_SIZE_2x - 1)/WORKGROUP_SIZE_2x); 
+                            Update_PipelineRadixScan1_buf(j, i);
+                            pipeline_radix_scan1_buf[j].dispatch(num_groups, 1, 1);
+                        }
+
+                        
+                        for (let k = 1; k<buffers_scan1.length; k++)
+                        {
+                            let num_groups = Math.floor((buf_sizes[k] + WORKGROUP_SIZE_2x - 1)/WORKGROUP_SIZE_2x); 
+                            pipeline_radix_scan2_buf[k-1].dispatch(num_groups, 1,1); 
+                        }
+
+                        for (let k = (buffers_scan1.length - 1) - 1; k>=0; k--)
+                        {
+                            let num_groups = Math.floor((buf_sizes[k] + WORKGROUP_SIZE - 1)/WORKGROUP_SIZE) - 2; 
+                            pipeline_radix_scan3_buf[k].dispatch(num_groups, 1,1);
                         }
                     }
 
-                    console.log(`count_unmatch: ${count_unmatch}`);
-                });
+                    {
+                        let num_groups = Math.floor((count + WORKGROUP_SIZE -1)/WORKGROUP_SIZE);
+                        pipeline_radix_scatter_buf[j].dispatch(num_groups, 1,1); 
+                    }
+                }
+
+                const endTime = performance.now();
+                //first execution more slower
+                if (p >= 1) {
+                    avgTime += endTime - startTime;
+                }
+                console.log(`Call to radix_sort took ${endTime - startTime} milliseconds [PASS #${p}]`);    
+
+                let buf_result;
+
+                {
+                    let j = bits % 2;
+                    buf_result = buf_tmp[j];
+                }
+
+                let hOutput = new Int32Array(count); 
+                {
+                    buf_result.read(0, count * 4, hOutput).then((arrayBufferView) => {
+
+                        hOutput = arrayBufferView;
+                        let count_unmatch = 0;
+                        for (let i=0; i<count; i++)
+                        {
+                            if (hOutput[i] != hReference[i])
+                            {
+                                count_unmatch++;
+                            }
+                        }
+
+                        console.log(`count_unmatch: ${count_unmatch}`);
+                    });
+                }
             }
 
-            return endTime - startTime;
+            avgTime /= NUM_PASSES;
+            console.log(`Call to radix_sort took ${avgTime} milliseconds [AVG in ${NUM_PASSES} PASSES]`);
+
+            return avgTime; //return endTime - startTime;
         }
